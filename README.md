@@ -1,4 +1,4 @@
-# Overview
+# separate_pages_mmdet (NDLOCR ver.2用)
 
 NDLOCR(ver.2)用の見開きの資料画像をページ単位でノド元で分割するモジュールのリポジトリです。モデルの学習には、MMDetection を利用します。
 
