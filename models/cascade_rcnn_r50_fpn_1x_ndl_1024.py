@@ -1,6 +1,11 @@
 model = dict(
     type='CascadeRCNN',
-    pretrained='torchvision://resnet50',
+    data_preprocessor=dict(
+        type='DetDataPreprocessor',
+        mean=[123.675, 116.28, 103.53],
+        std=[58.395, 57.12, 57.375],
+        bgr_to_rgb=True,
+        pad_size_divisor=32),
     backbone=dict(
         type='ResNet',
         depth=50,
@@ -9,7 +14,8 @@ model = dict(
         frozen_stages=1,
         norm_cfg=dict(type='BN', requires_grad=True),
         norm_eval=True,
-        style='pytorch'),
+        style='pytorch',
+        init_cfg=dict(type='Pretrained', checkpoint='torchvision://resnet50')),
     neck=dict(
         type='FPN',
         in_channels=[256, 512, 1024, 2048],
@@ -50,7 +56,7 @@ model = dict(
                 num_classes=2,
                 bbox_coder=dict(
                     type='DeltaXYWHBBoxCoder',
-                    target_means=[0.0, 0.0, 0.0, 0.0],
+                    target_means=[0., 0., 0., 0.],
                     target_stds=[0.1, 0.1, 0.2, 0.2]),
                 reg_class_agnostic=True,
                 loss_cls=dict(
@@ -67,7 +73,7 @@ model = dict(
                 num_classes=2,
                 bbox_coder=dict(
                     type='DeltaXYWHBBoxCoder',
-                    target_means=[0.0, 0.0, 0.0, 0.0],
+                    target_means=[0., 0., 0., 0.],
                     target_stds=[0.05, 0.05, 0.1, 0.1]),
                 reg_class_agnostic=True,
                 loss_cls=dict(
@@ -84,7 +90,7 @@ model = dict(
                 num_classes=2,
                 bbox_coder=dict(
                     type='DeltaXYWHBBoxCoder',
-                    target_means=[0.0, 0.0, 0.0, 0.0],
+                    target_means=[0., 0., 0., 0.],
                     target_stds=[0.033, 0.033, 0.067, 0.067]),
                 reg_class_agnostic=True,
                 loss_cls=dict(
@@ -93,6 +99,7 @@ model = dict(
                     loss_weight=1.0),
                 loss_bbox=dict(type='SmoothL1Loss', beta=1.0, loss_weight=1.0))
         ]),
+    # model training and testing settings
     train_cfg=dict(
         rpn=dict(
             assigner=dict(
@@ -112,8 +119,8 @@ model = dict(
             pos_weight=-1,
             debug=False),
         rpn_proposal=dict(
-            nms_pre=1000,
-            max_per_img=1000,
+            nms_pre=2000,
+            max_per_img=2000,
             nms=dict(type='nms', iou_threshold=0.7),
             min_bbox_size=0),
         rcnn=[
@@ -176,129 +183,147 @@ model = dict(
             score_thr=0.05,
             nms=dict(type='nms', iou_threshold=0.5),
             max_per_img=100)))
+
 dataset_type = 'CocoDataset'
 classes = ('gutter', 'void')
 data_root = 'data/coco/'
-img_norm_cfg = dict(
-    mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True)
-image_size = 1024
+
+image_size = (1024, 1024)
+
+
 train_pipeline = [
-    dict(type='LoadImageFromFile'),
+    dict(type='LoadImageFromFile', backend_args=None),
     dict(type='LoadAnnotations', with_bbox=True),
-    dict(type='Resize', img_scale=(1024, 1024), keep_ratio=True),
-    dict(type='RandomFlip', flip_ratio=0.5),
-    dict(
-        type='Normalize',
-        mean=[123.675, 116.28, 103.53],
-        std=[58.395, 57.12, 57.375],
-        to_rgb=True),
-    dict(type='Pad', size_divisor=32),
-    dict(type='DefaultFormatBundle'),
-    dict(type='Collect', keys=['img', 'gt_bboxes', 'gt_labels'])
+    dict(type='Resize', scale=(1024, 1024), keep_ratio=True),
+    dict(type='RandomFlip', prob=0.5),
+    dict(type='PackDetInputs')
 ]
+
 test_pipeline = [
-    dict(type='LoadImageFromFile'),
+    dict(type='LoadImageFromFile', backend_args=None),
+    dict(type='Resize', scale=(1024, 1024), keep_ratio=True),
+    dict(type='LoadAnnotations', with_bbox=True, with_mask=True),
     dict(
-        type='MultiScaleFlipAug',
-        img_scale=(1024, 1024),
-        flip=False,
-        transforms=[
-            dict(type='Resize', keep_ratio=True),
-            dict(type='RandomFlip'),
-            dict(
-                type='Normalize',
-                mean=[123.675, 116.28, 103.53],
-                std=[58.395, 57.12, 57.375],
-                to_rgb=True),
-            dict(type='Pad', size_divisor=32),
-            dict(type='ImageToTensor', keys=['img']),
-            dict(type='Collect', keys=['img'])
-        ])
+        type='PackDetInputs',
+        meta_keys=('img_id', 'img_path', 'ori_shape', 'img_shape',
+                   'scale_factor'))
 ]
-data = dict(
-    samples_per_gpu=1,
-    workers_per_gpu=1,
-    train=dict(
-        type='CocoDataset',
-        classes=('gutter', 'void'),
+
+train_dataloader = dict(
+    batch_size=1,
+    num_workers=1,
+    persistent_workers=True,
+    sampler=dict(type='DefaultSampler', shuffle=True),
+    batch_sampler=dict(type='AspectRatioBatchSampler'),
+    dataset=dict(
+        type=dataset_type,
+        data_root='/mnt/data/ndl/separate/',
         ann_file='/mnt/data/ndl/separate/gutter_aug_2022_1024x1024/train.json',
-        img_prefix='/mnt/data/ndl/separate/gutter_aug_2022_1024x1024',
-        pipeline=[
-            dict(type='LoadImageFromFile'),
-            dict(type='LoadAnnotations', with_bbox=True),
-            dict(type='Resize', img_scale=(1024, 1024), keep_ratio=True),
-            dict(type='RandomFlip', flip_ratio=0.5),
-            dict(
-                type='Normalize',
-                mean=[123.675, 116.28, 103.53],
-                std=[58.395, 57.12, 57.375],
-                to_rgb=True),
-            dict(type='Pad', size_divisor=32),
-            dict(type='DefaultFormatBundle'),
-            dict(type='Collect', keys=['img', 'gt_bboxes', 'gt_labels'])
-        ]),
-    val=dict(
-        type='CocoDataset',
-        classes=('gutter', 'void'),
+        data_prefix=dict(
+                    img='/mnt/data/ndl/separate/gutter_aug_2022_1024x1024'),
+        filter_cfg=dict(filter_empty_gt=True, min_size=32),
+        pipeline=train_pipeline,
+        backend_args=None
+    )
+)
+test_dataloader = dict(
+    batch_size=1,
+    num_workers=1,
+    persistent_workers=True,
+    sampler=dict(type='DefaultSampler', shuffle=True),
+    batch_sampler=dict(type='AspectRatioBatchSampler'),
+    dataset=dict(
+        type=dataset_type,
+        data_root='/mnt/data/ndl/separate/',
         ann_file='/mnt/data/ndl/separate/gutter_aug_2022_1024x1024/test.json',
-        img_prefix='/mnt/data/ndl/separate/gutter_aug_2022_1024x1024',
-        pipeline=[
-            dict(type='LoadImageFromFile'),
-            dict(
-                type='MultiScaleFlipAug',
-                img_scale=(1024, 1024),
-                flip=False,
-                transforms=[
-                    dict(type='Resize', keep_ratio=True),
-                    dict(type='RandomFlip'),
-                    dict(
-                        type='Normalize',
-                        mean=[123.675, 116.28, 103.53],
-                        std=[58.395, 57.12, 57.375],
-                        to_rgb=True),
-                    dict(type='Pad', size_divisor=32),
-                    dict(type='ImageToTensor', keys=['img']),
-                    dict(type='Collect', keys=['img'])
-                ])
-        ]),
-    test=dict(
-        type='CocoDataset',
-        classes=('gutter', 'void'),
+        data_prefix=dict(
+                    img='/mnt/data/ndl/separate/gutter_aug_2022_1024x1024'),
+        filter_cfg=dict(filter_empty_gt=True, min_size=32),
+        pipeline=test_pipeline,
+        backend_args=None
+    )
+)
+val_dataloader = dict(
+    batch_size=1,
+    num_workers=1,
+    persistent_workers=True,
+    sampler=dict(type='DefaultSampler', shuffle=True),
+    batch_sampler=dict(type='AspectRatioBatchSampler'),
+    dataset=dict(
+        type=dataset_type,
+        data_root='/mnt/data/ndl/separate/',
         ann_file='/mnt/data/ndl/separate/gutter_aug_2022_1024x1024/test.json',
-        img_prefix='/mnt/data/ndl/separate/gutter_aug_2022_1024x1024',
-        pipeline=[
-            dict(type='LoadImageFromFile'),
-            dict(
-                type='MultiScaleFlipAug',
-                img_scale=(1024, 1024),
-                flip=False,
-                transforms=[
-                    dict(type='Resize', keep_ratio=True),
-                    dict(type='RandomFlip'),
-                    dict(
-                        type='Normalize',
-                        mean=[123.675, 116.28, 103.53],
-                        std=[58.395, 57.12, 57.375],
-                        to_rgb=True),
-                    dict(type='Pad', size_divisor=32),
-                    dict(type='ImageToTensor', keys=['img']),
-                    dict(type='Collect', keys=['img'])
-                ])
-        ]))
-evaluation = dict(interval=5, metric=['bbox'], classwise=True)
-optimizer = dict(type='SGD', lr=0.02, momentum=0.9, weight_decay=0.0001)
-optimizer_config = dict(grad_clip=None)
-lr_config = dict(policy='step', step=[8, 11])
-runner = dict(type='EpochBasedRunner', max_epochs=500)
-checkpoint_config = dict(interval=5)
-log_config = dict(interval=50, hooks=[dict(type='TextLoggerHook')])
-custom_hooks = [dict(type='NumClassCheckHook')]
-dist_params = dict(backend='nccl')
+        data_prefix=dict(img='/mnt/data/ndl/separate/gutter_aug_2022_1024x1024'),
+        filter_cfg=dict(filter_empty_gt=True, min_size=32),
+        pipeline=test_pipeline,
+        backend_args=None
+    )
+)
+val_evaluator = dict(
+    type='CocoMetric',
+    ann_file='/data/guest_data/ndl/data_coco/20230203_preprocessed/hyouka_202303_1000.json',
+    metric=['bbox', 'segm'],
+    format_only=False,
+    backend_args=None)
+test_evaluator = dict(
+    type='CocoMetric',
+    ann_file='/data/guest_data/ndl/data_coco/20230203_preprocessed/hyouka_202303_1000.json',
+    metric=['bbox', 'segm'],
+    format_only=False,
+    backend_args=None)
+
+train_cfg = dict(
+    type='EpochBasedTrainLoop', max_epochs=500, val_interval=5)
+val_cfg = dict(type='ValLoop')
+test_cfg = dict(type='TestLoop')
+param_scheduler = [
+    dict(
+        type='MultiStepLR',
+        begin=0,
+        end=500,
+        by_epoch=True,
+        milestones=[8, 11],
+        gamma=0.1)
+]
+optim_wrapper = dict(
+    type='OptimWrapper',
+    optimizer=dict(type='SGD', lr=0.02, momentum=0.9, weight_decay=0.0001))
+
+auto_scale_lr = dict(enable=False, base_batch_size=16)
+default_hooks = dict(
+    timer=dict(type='IterTimerHook'),
+    logger=dict(type='LoggerHook', interval=50),
+    param_scheduler=dict(type='ParamSchedulerHook'),
+    checkpoint=dict(
+        type='CheckpointHook', interval=1, max_keep_ckpts=1),
+    sampler_seed=dict(type='DistSamplerSeedHook'),
+    visualization=dict(type='DetVisualizationHook'))
+env_cfg = dict(
+    cudnn_benchmark=False,
+    mp_cfg=dict(mp_start_method='fork', opencv_num_threads=0),
+    dist_cfg=dict(backend='nccl'))
+
+vis_backends = [dict(type='LocalVisBackend')]
+visualizer = dict(
+    type='DetLocalVisualizer',
+    vis_backends=[dict(type='LocalVisBackend')],
+    name='visualizer')
+
+log_processor = dict(
+    type='LogProcessor', window_size=50, by_epoch=True)
+
 log_level = 'INFO'
-load_from = None
-resume_from = 'train_20221215/latest.pth'
-workflow = [('train', 1)]
-num_classes = 2
+load_from = 'train_20221215/latest.pth'
+resume = False
+custom_imports = dict(imports=['mmcls.models'], allow_failed_imports=False)
+checkpoint_file = 'https://download.openmmlab.com/mmclassification/v0/convnext-v2/convnext-v2-tiny_fcmae-in21k-pre_3rdparty_in1k-384px_20230104-d8579f84.pth'
+image_size = (1024, 1024)
+max_epochs = 500
 work_dir = 'train_20221215/'
+seed = 0
 gpu_ids = [0]
-auto_resume = False
+device = 'cuda'
+classes = ('gutter', 'void')
+metainfo = dict(
+    classes=classes,
+)
