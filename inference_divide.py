@@ -10,6 +10,7 @@ import argparse
 import glob
 import cv2
 import numpy as np
+import mmengine
 import mmcv
 from mmdet.apis import (inference_detector, init_detector)
 
@@ -50,7 +51,7 @@ class GutterDetector:
     def __init__(self, config: str, checkpoint: str, device: str):
         print(f'load from config={config}, checkpoint={checkpoint}')
         self.load(config, checkpoint, device)
-        cfg = mmcv.Config.fromfile(config)
+        cfg = mmengine.Config.fromfile(config)
         self.classes = cfg.classes
         self.colors = generate_class_colors(len(self.classes))
 
