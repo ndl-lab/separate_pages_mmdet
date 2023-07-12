@@ -10,8 +10,8 @@ import argparse
 import glob
 import cv2
 import numpy as np
-import mmengine
 import mmcv
+import mmengine
 from mmdet.apis import (inference_detector, init_detector)
 
 import time
@@ -103,13 +103,15 @@ class GutterDetector:
 
         max_conf = 0.0
         max_idx  = None
-        for idx, pred in enumerate(result[0]):
-            if max_conf < pred[4] and score_thr < pred[4]:
-                max_conf = pred[4]
+        idx=0
+        for pred,score,cls in zip(result.pred_instances.bboxes,result.pred_instances.scores,result.pred_instances.labels):
+            if cls==0 and max_conf < score and score_thr < score:
+                max_conf = score
                 max_idx  = idx
+            idx+=1
 
         if max_idx is not None:
-            pred = result[0][max_idx]
+            pred = result.pred_instances.bboxes[max_idx]
             x_center = (int(pred[0])+int(pred[2]))//2
             img_L = img[:, 0: x_center]
             img_R = img[:, x_center:]
@@ -122,13 +124,15 @@ class GutterDetector:
 
         max_conf = 0.0
         max_idx  = None
-        for idx, pred in enumerate(result[0]):
-            if max_conf < pred[4] and score_thr < pred[4]:
-                max_conf = pred[4]
+        idx=0
+        for pred,score,cls in zip(result.pred_instances.bboxes,result.pred_instances.scores,result.pred_instances.labels):
+            if cls==0 and max_conf < score and score_thr < score:
+                max_conf = score
                 max_idx  = idx
+            idx+=1
 
         if max_idx is not None:
-            pred = result[0][max_idx]
+            pred = result.pred_instances.bboxes[max_idx]
             x_center = (int(pred[0])+int(pred[2]))//2
             img_L = img[:, 0: x_center]
             img_R = img[:, x_center:]
@@ -138,15 +142,14 @@ class GutterDetector:
 
     def draw_rects_with_data(self, img, result, score_thr: float = 0.3,
                              border: int = 3, show_legand: bool = True):
-        for c in range(len(result)):
-            color = self.colors[c]
+        for pred,score,cls in zip(result.pred_instances.bboxes,result.pred_instances.scores,result.pred_instances.labels):
+            color = self.colors[cls]
             color = (int(color[0]), int(color[1]), int(color[2]))
-            for pred in result[c]:
-                if float(pred[4]) < score_thr:
-                    continue
-                x0, y0 = int(pred[0]), int(pred[1])
-                x1, y1 = int(pred[2]), int(pred[3])
-                img = cv2.rectangle(img, (x0, y0), (x1, y1), color, border)
+            if float(score) < score_thr:
+                continue
+            x0, y0 = int(pred[0]), int(pred[1])
+            x1, y1 = int(pred[2]), int(pred[3])
+            img = cv2.rectangle(img, (x0, y0), (x1, y1), color, border)
 
         sz = max(img.shape[0], img.shape[1])
         scale = 1024.0 / sz
