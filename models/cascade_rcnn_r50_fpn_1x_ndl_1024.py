@@ -315,7 +315,7 @@ log_processor = dict(
 log_level = 'INFO'
 load_from = 'train_20221215/latest.pth'
 resume = False
-custom_imports = dict(imports=['mmcls.models'], allow_failed_imports=False)
+custom_imports = dict(imports=['mmpretrain.models'], allow_failed_imports=False)
 checkpoint_file = 'https://download.openmmlab.com/mmclassification/v0/convnext-v2/convnext-v2-tiny_fcmae-in21k-pre_3rdparty_in1k-384px_20230104-d8579f84.pth'
 image_size = (1024, 1024)
 max_epochs = 500
